@@ -13,31 +13,3 @@
 * **Confused Deputy Prevention:** Implements strict AWS STS `AssumeRole` handshakes verified using per-tenant, non-predictable `ExternalId` parameters.
 * **Standardized Tool Integration (MCP):** Leverages the Model Context Protocol (MCP) to enforce auditable, policy-bounded tool executions (e.g., `fca_compliance_checker`).
 * **Modular Infrastructure as Code (IaC):** 100% defined using **AWS CDK in TypeScript**, separating central orchestration stacks from tenant-side data stacks.
-
----
-
-## 🏗️ Technical Architecture & System Flow
-
-
-┌───────────────────────────────────────────────────────────────────────────────────┐
-│                        CONTROL PLANE (Central Platform Account)                   │
-│                                                                                   │
-│   ┌──────────────────┐       ┌────────────────────┐       ┌───────────────────┐   │
-│   │  React + Vite UI │ ────> │  AWS API Gateway   │ ────> │ Node.js Lambda    │   │
-│   │  (Dashboard)     │       │  (REST Endpoints)  │       │ (Control Handler) │   │
-│   └──────────────────┘       └────────────────────┘       └─────────┬─────────┘   │
-│                                                                     │             │
-│                                                              DynamoDB Table       │
-└─────────────────────────────────────────────────────────────────────┼─────────────┘
-                                                                      │
-                                                AWS STS AssumeRole    │
-                                                (ExternalID Verified) │
-                                                                      ▼
-┌───────────────────────────────────────────────────────────────────────────────────┐
-│                        DATA PLANE (Customer Isolated Account)                     │
-│                                                                                   │
-│    ┌───────────────────────────┐                ┌────────────────────────────┐    │
-│    │  Amazon Bedrock AgentCore │ <────────────> │ MCP Compliance Server      │    │
-│    │  (Anthropic Claude 3)     │                │ (fca_compliance_checker)   │    │
-│    └───────────────────────────┘                └────────────────────────────┘    │
-└───────────────────────────────────────────────────────────────────────────────────┘
