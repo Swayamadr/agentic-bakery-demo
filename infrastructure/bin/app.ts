@@ -6,16 +6,16 @@ import { DataPlaneStack } from '../lib/data-plane-stack';
 
 const app = new cdk.App();
 
-// Use CDK_DEFAULT_ACCOUNT if available, otherwise CDK will infer from active AWS CLI credentials
+// Replace '123456789012' with your real 12-digit AWS Account ID
 const env = {
-  account: process.env.CDK_DEFAULT_ACCOUNT || process.env.AWS_ACCOUNT_ID,
-  region: process.env.CDK_DEFAULT_REGION || 'eu-west-2',
+  account: '123456789012', 
+  region: 'eu-west-2',
 };
 
 // 1. Central Control Plane Stack
 const controlPlane = new ControlPlaneStack(app, 'AgenticBakeryControlPlaneStack', { env });
 
-// 2. Data Plane Stack for Customer Tenant
+// 2. Customer Data Plane Stack
 new DataPlaneStack(app, 'AgenticBakeryDataPlaneStack-UKBank', {
   env,
   tenantId: 'uk-regulated-bank-01',

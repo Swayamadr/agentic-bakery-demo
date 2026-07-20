@@ -1,31 +1,40 @@
-import { BedrockAgentClient, CreateAgentCommand } from "@aws-sdk/client-bedrock-agent";
+import { DynamoDBClient, PutItemCommand } from '@aws-sdk/client-dynamodb';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 
-export interface DeployConfig {
-  roleArn: string;
-  agentName: string;
-  tenantId: string;
-  accessKeyId: string;
-  secretAccessKey: string;
-  sessionToken: string;
-  region?: string;
-}
-
-export async function deployBedrockAgentCore(config: DeployConfig) {
-  const client = new BedrockAgentClient({
-    region: config.region || "eu-west-2",
-    credentials: {
-      accessKeyId: config.accessKeyId,
-      secretAccessKey: config.secretAccessKey,
-      sessionToken: config.sessionToken,
-    },
+export async function provisionCustomerDataResources(
+  assumedCredentials: { accessKeyId: string; secretAccessKey: string; sessionToken: string },
+  tenantId: string,
+  region: string
+) {
+  // Initialize clients using the short-lived customer STS credentials
+  const dynamoClient = new DynamoDBClient({
+    region,
+    credentials: assumedCredentials,
   });
 
-  const command = new CreateAgentCommand({
-    agentName: `${config.agentName}-${config.tenantId}`,
-    foundationModel: "anthropic.claude-3-haiku-20240307-v1:0",
-    instruction: "You are an AI Compliance Agent running on customer Bedrock AgentCore data plane.",
-    agentResourceRoleArn: config.roleArn,
+  const s3Client = new S3Client({
+    region,
+    credentials: assumedCredentials,
   });
 
-  return await client.send(command);
+  // Example: Initialize agent session state in customer's DynamoDB
+  await dynamoClient.send(new PutItemCommand({
+    TableName: `agentic-bakery-memory-${tenantId}`,
+    Item: {
+      sessionId: { S: 'init-session' },
+      timestamp: { S: new Date().toISOString() },
+      status: { S: 'ACTIVE' },
+      agentVersion: { S: 'v1.0.0' }
+    }
+  }));
+
+  // Example: Upload initial system prompt / policy document into customer's S3
+  await s3Client.send(new PutObjectCommand({
+    Bucket: `agentic-bakery-kb-${tenantId}-customerAccountId`,
+    Key: 'policies/fca-compliance-rules.json',
+    Body: JSON.stringify({ version: '2026.1', region: 'UK-FCA' }),
+    ContentType: 'application/json',
+  }));
+
+  return { success: true, message: 'Customer storage initialized successfully.' };
 }
