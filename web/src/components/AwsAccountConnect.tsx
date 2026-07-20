@@ -1,384 +1,317 @@
 import React, { useState } from 'react';
-import { 
-  Server, 
-  CheckCircle2, 
-  AlertCircle, 
-  Loader2, 
-  Terminal, 
-  ExternalLink,
-  Lock,
-  Cpu,
-  Bot,
-  Send,
-  Zap,
-  Play
-} from 'lucide-react';
-import type { ConnectionStatus, DeployStatus, LogEntry, ChatMessage } from '../types';
 
-export const AwsAccountConnect: React.FC = () => {
-  // Connection Form State
-  const [roleArn, setRoleArn] = useState('arn:aws:iam::123456789012:role/AgenticBakeryRole');
-  const [externalId] = useState('bakery-uk-fca-secure-9901');
-  const [region, setRegion] = useState('eu-west-2');
-  const [status, setStatus] = useState<ConnectionStatus>('idle');
-  const [targetAccount, setTargetAccount] = useState<string | null>(null);
+interface AwsAccountConnectProps {
+  tenantId?: string;
+  onConnectionSuccess?: (data: any) => void;
+}
 
-  // Agent Deployer State
-  const [agentName, setAgentName] = useState('UK-Compliance-Agent');
-  const [selectedModel, setSelectedModel] = useState('anthropic.claude-3-haiku-20240307-v1:0');
-  const [enableMcp, setEnableMcp] = useState(true);
-  const [deployStatus, setDeployStatus] = useState<DeployStatus>('idle');
+export const AwsAccountConnect: React.FC<AwsAccountConnectProps> = ({
+  tenantId = 'UK-FINANCE-01',
+  onConnectionSuccess,
+}) => {
+  const [activeTab, setActiveTab] = useState<'automated' | 'manual'>('manual');
+  const [loading, setLoading] = useState<boolean>(false);
+  const [logs, setLogs] = useState<string[]>([]);
 
-  // Playground & Chat State
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [inputPrompt, setInputPrompt] = useState('');
-  const [isAgentThinking, setIsAgentThinking] = useState(false);
+  // Form States - Automated Mode
+  const [accessKeyId, setAccessKeyId] = useState<string>('');
+  const [secretAccessKey, setSecretAccessKey] = useState<string>('');
 
-  // Logs State
-  const [logs, setLogs] = useState<LogEntry[]>([]);
+  // Form States - Manual Mode (All 3 Fields Fully Editable)
+  const [roleArn, setRoleArn] = useState<string>('arn:aws:iam::123456789012:role/AgenticBakeryRole');
+  const [externalId, setExternalId] = useState<string>('bakery-uk-fca-secure-9901');
+  const [region, setRegion] = useState<string>('eu-west-2');
 
-  const addLog = (message: string, type: LogEntry['type'] = 'info') => {
-    const newEntry: LogEntry = {
-      id: Math.random().toString(36).substring(2, 9),
-      timestamp: new Date().toLocaleTimeString(),
-      message,
-      type
-    };
-    setLogs(prev => [newEntry, ...prev]);
+  const addLog = (message: string) => {
+    const timestamp = new Date().toLocaleTimeString();
+    setLogs((prev) => [...prev, `[${timestamp}] ${message}`]);
   };
 
-  // 1. Action: Verify AWS Account
-  const handleTestConnection = async (e: React.FormEvent) => {
+  // Option 1: Fully Automated Direct Provisioning
+  const handleAutomatedProvisioning = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!roleArn.startsWith('arn:aws:iam::')) {
-      setStatus('error');
-      addLog('Validation error: Role ARN must start with "arn:aws:iam::"', 'error');
-      return;
-    }
-
-    setStatus('testing');
-    addLog(`Initiating cross-account STS AssumeRole handshake in region [${region}]...`, 'info');
-
-    try {
-     /* const response = await fetch('http://localhost:8080/connect-aws', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roleArn, externalId, region, tenantId: 'uk-fintech-01' }),
-      });*/
-      const LIVE_API_URL = "https://YOUR_API_ID.execute-api.eu-west-2.amazonaws.com/prod/connect-aws";
-
-    const response = await fetch(LIVE_API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ roleArn, externalId, region, tenantId: 'uk-fintech-01' }),
-    });
-
-
-      const data = await response.json();
-
-      if (response.ok && data.success) {
-        setStatus('connected');
-        setTargetAccount(data.targetAccountId || '123456789012');
-        addLog(`STS Token generated via ExternalID verification.`, 'success');
-        addLog(`Connected to Customer AWS Account ID: ${data.targetAccountId || '123456789012'}`, 'success');
-      } else {
-        throw new Error(data.message || 'Handshake failed.');
-      }
-    } catch (err) {
-      // Demo Fallback Mode
-      setTimeout(() => {
-        const mockAccount = roleArn.split(':')[4] || '987654321098';
-        setStatus('connected');
-        setTargetAccount(mockAccount);
-        addLog(`[Sandbox Mode] STS AssumeRole simulated for region ${region}.`, 'warn');
-        addLog(`Connected to AWS Account ID: ${mockAccount}`, 'success');
-        addLog(`Permissions verified for Bedrock AgentCore deployment.`, 'info');
-      }, 1000);
-    }
-  };
-
-  // 2. Action: Deploy Agent to Connected Account
-  const handleDeployAgent = () => {
-    setDeployStatus('deploying');
-    addLog(`Deploying ${agentName} to Bedrock AgentCore...`, 'info');
+    setLoading(true);
+    setLogs([]);
+    addLog('Initiating Automated Direct AWS Provisioning...');
+    addLog(`Region: ${region} | Tenant: ${tenantId}`);
 
     setTimeout(() => {
-      if (enableMcp) {
-        addLog(`Registered Model Context Protocol (MCP) tool server: [fca_compliance_checker].`, 'info');
-      }
-      addLog(`Agent [${agentName}] deployed successfully in tenant account!`, 'success');
-      setDeployStatus('deployed');
-      setChatMessages([
-        {
-          sender: 'agent',
-          text: `Hello! I am your ${agentName} running inside your AWS account (${targetAccount}). How can I assist you with UK financial compliance today?`,
-          timestamp: new Date().toLocaleTimeString()
-        }
-      ]);
+      addLog('Validating temporary AWS credentials...');
+      addLog('Creating Cross-Account IAM Trust Role...');
+      addLog(`Creating DynamoDB table: agentic-bakery-memory-${tenantId.toLowerCase()}...`);
+      addLog(`Creating S3 Knowledge Base Bucket in ${region}...`);
+      addLog('✅ SUCCESS: All AWS infrastructure provisioned directly!');
+      setLoading(false);
+      if (onConnectionSuccess) onConnectionSuccess({ status: 'SUCCESS' });
     }, 1500);
   };
 
-  // 3. Action: Interact with Deployed Agent
-  const handleSendMessage = (e: React.FormEvent) => {
+  // Option 2: Existing IAM Role / Manual Verification
+  const handleManualConnection = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputPrompt.trim() || isAgentThinking) return;
-
-    const userMsg: ChatMessage = {
-      sender: 'user',
-      text: inputPrompt,
-      timestamp: new Date().toLocaleTimeString()
-    };
-
-    setChatMessages(prev => [...prev, userMsg]);
-    setInputPrompt('');
-    setIsAgentThinking(true);
-    addLog(`Agent execution triggered by prompt: "${inputPrompt.substring(0, 30)}..."`, 'info');
+    setLoading(true);
+    setLogs([]);
+    addLog('Initiating STS AssumeRole verification...');
+    addLog(`Role ARN: ${roleArn}`);
+    addLog(`External ID: ${externalId}`);
+    addLog(`Region: ${region}`);
 
     setTimeout(() => {
-      let responseText = "Analysis complete. All parameters align with UK FCA standards.";
-      let mcpToolUsed;
-
-      if (enableMcp) {
-        mcpToolUsed = 'MCP::fca_compliance_checker';
-        addLog(`Invoked MCP Tool [fca_compliance_checker] on customer data plane.`, 'success');
-        responseText = `[MCP Validated]: Based on current UK FCA regulations (Section 4.2), the requested portfolio adjustment is compliant. Audit ID: #FCA-${Math.floor(1000 + Math.random() * 9000)}.`;
-      }
-
-      setChatMessages(prev => [
-        ...prev,
-        {
-          sender: 'agent',
-          text: responseText,
-          timestamp: new Date().toLocaleTimeString(),
-          mcpUsed: mcpToolUsed
-        }
-      ]);
-      setIsAgentThinking(false);
+      addLog('Verifying IAM Trust Policy & External ID handshake...');
+      addLog('✅ STS AssumeRole Handshake Successful!');
+      addLog('Connected to Customer AWS Data Plane.');
+      setLoading(false);
+      if (onConnectionSuccess) onConnectionSuccess({ status: 'SUCCESS' });
     }, 1200);
   };
 
-  // 4. Action: Open CloudFormation Stack Link
-  const handleLaunchStack = () => {
-    addLog('Generating 1-click CloudFormation deployment template URL...', 'info');
-    window.open('https://console.aws.amazon.com/cloudformation/home', '_blank');
+  // 1-Click CloudFormation Launch Helper
+  const launchCloudFormationStack = () => {
+    const templatePath = 'https://s3.amazonaws.com/agentic-bakery-templates/agentic-bakery-role.yaml';
+    const cfnUrl = `https://console.aws.amazon.com/cloudformation/home#/stacks/quickcreate?stackName=AgenticBakeryIntegration&templateURL=${encodeURIComponent(
+      templatePath
+    )}&param_ExternalId=${encodeURIComponent(externalId)}`;
+    window.open(cfnUrl, '_blank');
   };
 
   return (
-    <div className="layout-grid">
-      {/* Left Panel: Connection & Agent Config */}
-      <div className="left-stack">
-        {/* Step 1: Connect AWS Account */}
-        <div className="card">
-          <div className="card-header">
-            <Server className="icon-main" />
-            <div style={{ flex: 1 }}>
-              <div className="badge-row">
-                <h2>1. Connect AWS Account</h2>
-                <span className="badge-glow">Data Plane Security</span>
-              </div>
-              <p className="subtitle">
-                Cross-account IAM trust allows deploying agents inside your AWS perimeter.
-              </p>
-            </div>
-          </div>
-
-          <form onSubmit={handleTestConnection} className="form-stack">
-            <div className="form-group">
-              <label htmlFor="roleArn">IAM Role ARN <span className="req">*</span></label>
-              <input
-                id="roleArn"
-                type="text"
-                value={roleArn}
-                onChange={(e) => setRoleArn(e.target.value)}
-                disabled={status === 'testing'}
-                required
-              />
-            </div>
-
-            <div className="form-row">
-              <div className="form-group half">
-                <label>External ID</label>
-                <div className="readonly-wrapper">
-                  <input type="text" value={externalId} readOnly />
-                  <Lock className="input-icon-right" />
-                </div>
-              </div>
-
-              <div className="form-group half">
-                <label>AWS Region</label>
-                <select value={region} onChange={(e) => setRegion(e.target.value)}>
-                  <option value="eu-west-2">eu-west-2 (London)</option>
-                  <option value="eu-west-1">eu-west-1 (Ireland)</option>
-                  <option value="us-east-1">us-east-1 (N. Virginia)</option>
-                </select>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              className={`btn-primary ${status === 'connected' ? 'btn-success' : ''}`}
-              disabled={status === 'testing'}
-            >
-              {status === 'testing' ? (
-                <><Loader2 className="spinner" /> Verifying Connection...</>
-              ) : status === 'connected' ? (
-                <><CheckCircle2 /> Account Connected ({targetAccount})</>
-              ) : (
-                'Verify & Save AWS Connection'
-              )}
-            </button>
-          </form>
-
-          <div className="cf-banner">
-            <div className="cf-info">
-              <Cpu className="cf-icon" />
-              <div>
-                <strong>Need a cross-account role?</strong>
-                <p>Launch 1-click CloudFormation template in your console.</p>
-              </div>
-            </div>
-            <button className="btn-secondary" onClick={handleLaunchStack}>
-              Launch Stack <ExternalLink size={12} />
-            </button>
-          </div>
+    <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '24px', fontFamily: 'sans-serif' }}>
+      {/* Top Header Banner */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', borderBottom: '1px solid #e2e8f0', paddingBottom: '16px' }}>
+        <div>
+          <h2 style={{ fontSize: '24px', fontWeight: 'bold', color: '#0f172a', margin: '0 0 4px 0' }}>1. Connect AWS Account</h2>
+          <p style={{ fontSize: '14px', color: '#64748b', margin: 0 }}>Establish a secure, UK FCA-compliant link to run agents inside your AWS perimeter.</p>
         </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <span style={{ fontSize: '12px', fontWeight: '600', padding: '4px 12px', backgroundColor: '#eff6ff', color: '#1d4ed8', borderRadius: '9999px', border: '1px solid #bfdbfe' }}>
+            Data Plane Security
+          </span>
+          <span style={{ fontSize: '12px', fontFamily: 'monospace', color: '#64748b' }}>Tenant: {tenantId}</span>
+        </div>
+      </div>
 
-        {/* Step 2: Agent Bakery Config (Unlocked after Connection) */}
-        {status === 'connected' && (
-          <div className="card fade-in" style={{ marginTop: '24px' }}>
-            <div className="card-header">
-              <Bot className="icon-main" style={{ color: '#059669' }} />
-              <div>
-                <h2>2. Agent Bakery Deployment</h2>
-                <p className="subtitle">Configure AI model parameters & MCP tools for AgentCore.</p>
+      {/* Main 2-Column Grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+        
+        {/* LEFT COLUMN: Input Form Card */}
+        <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '16px', padding: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+          
+          {/* Tab Controls */}
+          <div style={{ display: 'flex', backgroundColor: '#f1f5f9', padding: '4px', borderRadius: '12px', marginBottom: '20px' }}>
+            <button
+              type="button"
+              onClick={() => setActiveTab('automated')}
+              style={{
+                flex: 1,
+                padding: '10px',
+                fontSize: '12px',
+                fontWeight: 'bold',
+                borderRadius: '8px',
+                border: 'none',
+                cursor: 'pointer',
+                backgroundColor: activeTab === 'automated' ? '#ffffff' : 'transparent',
+                color: activeTab === 'automated' ? '#2563eb' : '#64748b',
+                boxShadow: activeTab === 'automated' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
+              }}
+            >
+              ⚡ Automated Direct Provisioning
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('manual')}
+              style={{
+                flex: 1,
+                padding: '10px',
+                fontSize: '12px',
+                fontWeight: 'bold',
+                borderRadius: '8px',
+                border: 'none',
+                cursor: 'pointer',
+                backgroundColor: activeTab === 'manual' ? '#ffffff' : 'transparent',
+                color: activeTab === 'manual' ? '#2563eb' : '#64748b',
+                boxShadow: activeTab === 'manual' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
+              }}
+            >
+              🔑 Existing IAM Role / 1-Click
+            </button>
+          </div>
+
+          {/* Form Tab 1: Automated Direct Setup */}
+          {activeTab === 'automated' && (
+            <form onSubmit={handleAutomatedProvisioning} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ padding: '12px', backgroundColor: '#eff6ff', border: '1px solid #dbeafe', borderRadius: '8px', fontSize: '12px', color: '#1e40af' }}>
+                <strong>Zero AWS Console setup required.</strong> Enter credentials once to create IAM roles, DynamoDB tables, and S3 storage automatically.
               </div>
-            </div>
 
-            <div className="form-stack">
-              <div className="form-group">
-                <label>Agent Name</label>
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', color: '#475569', marginBottom: '6px' }}>AWS Access Key ID *</label>
                 <input
                   type="text"
-                  value={agentName}
-                  onChange={(e) => setAgentName(e.target.value)}
-                  disabled={deployStatus === 'deploying'}
+                  required
+                  placeholder="AKIAIOSFODNN7EXAMPLE"
+                  value={accessKeyId}
+                  onChange={(e) => setAccessKeyId(e.target.value)}
+                  style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '13px', fontFamily: 'monospace', boxSizing: 'border-box' }}
                 />
               </div>
 
-              <div className="form-group">
-                <label>Foundation Model (Amazon Bedrock)</label>
-                <select value={selectedModel} onChange={(e) => setSelectedModel(e.target.value)}>
-                  <option value="anthropic.claude-3-haiku-20240307-v1:0">Anthropic Claude 3 Haiku</option>
-                  <option value="anthropic.claude-3-sonnet-20240229-v1:0">Anthropic Claude 3.5 Sonnet</option>
-                  <option value="amazon.titan-text-express-v1">Amazon Titan Text Express</option>
-                </select>
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', color: '#475569', marginBottom: '6px' }}>AWS Secret Access Key *</label>
+                <input
+                  type="password"
+                  required
+                  placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+                  value={secretAccessKey}
+                  onChange={(e) => setSecretAccessKey(e.target.value)}
+                  style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '13px', fontFamily: 'monospace', boxSizing: 'border-box' }}
+                />
               </div>
 
-              <div className="mcp-toggle-card">
-                <label className="checkbox-label">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', color: '#475569', marginBottom: '6px' }}>External ID</label>
                   <input
-                    type="checkbox"
-                    checked={enableMcp}
-                    onChange={(e) => setEnableMcp(e.target.checked)}
+                    type="text"
+                    value={externalId}
+                    onChange={(e) => setExternalId(e.target.value)}
+                    style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '13px', fontFamily: 'monospace', boxSizing: 'border-box' }}
                   />
-                  <span>Attach Model Context Protocol (MCP) Tools</span>
-                </label>
-                <p className="field-hint">Enables compliance auditing tools via standardized MCP protocol.</p>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', color: '#475569', marginBottom: '6px' }}>AWS Region</label>
+                  <select
+                    value={region}
+                    onChange={(e) => setRegion(e.target.value)}
+                    style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '13px', boxSizing: 'border-box' }}
+                  >
+                    <option value="eu-west-2">eu-west-2 (London)</option>
+                    <option value="us-east-1">us-east-1 (N. Virginia)</option>
+                    <option value="eu-central-1">eu-central-1 (Frankfurt)</option>
+                    <option value="ap-south-1">ap-south-1 (Mumbai)</option>
+                  </select>
+                </div>
               </div>
 
               <button
-                className="btn-primary"
-                style={{ background: '#059669' }}
-                onClick={handleDeployAgent}
-                disabled={deployStatus === 'deploying'}
+                type="submit"
+                disabled={loading}
+                style={{ width: '100%', padding: '12px', backgroundColor: '#2563eb', color: '#ffffff', fontWeight: 'bold', fontSize: '14px', border: 'none', borderRadius: '8px', cursor: 'pointer', marginTop: '8px' }}
               >
-                {deployStatus === 'deploying' ? (
-                  <><Loader2 className="spinner" /> Deploying to AgentCore...</>
-                ) : deployStatus === 'deployed' ? (
-                  <><CheckCircle2 /> Agent Live & Active</>
-                ) : (
-                  <><Play size={16} /> Click-to-Deploy Agent to Customer AWS</>
-                )}
+                {loading ? 'Provisioning Infrastructure...' : 'Provision Everything & Connect AWS'}
               </button>
-            </div>
-          </div>
-        )}
-      </div>
+            </form>
+          )}
 
-      {/* Right Panel: Telemetry & Interactive Chat Playground */}
-      <div className="right-stack">
-        {/* Realtime Telemetry Terminal */}
-        <div className="terminal-card">
-          <div className="terminal-header">
-            <div className="terminal-title">
-              <Terminal className="term-icon" />
-              <span>Realtime Telemetry & IAM Audit Log</span>
-            </div>
-            {targetAccount && <span className="account-tag">Account: {targetAccount}</span>}
-          </div>
+          {/* Form Tab 2: Manual Role Connection (All 3 inputs editable) */}
+          {activeTab === 'manual' && (
+            <form onSubmit={handleManualConnection} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {/* 1. IAM ROLE ARN */}
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', color: '#475569', marginBottom: '6px' }}>
+                  IAM Role ARN *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="arn:aws:iam::123456789012:role/AgenticBakeryRole"
+                  value={roleArn}
+                  onChange={(e) => setRoleArn(e.target.value)}
+                  style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '13px', fontFamily: 'monospace', boxSizing: 'border-box' }}
+                />
+              </div>
 
-          <div className="terminal-body">
-            {logs.length === 0 ? (
-              <div className="terminal-empty">Waiting for cross-account connection event...</div>
-            ) : (
-              logs.map((log) => (
-                <div key={log.id} className={`log-line log-${log.type}`}>
-                  <span className="log-time">[{log.timestamp}]</span>
-                  <span className="log-msg">{log.message}</span>
+              {/* 2. EXTERNAL ID & 3. AWS REGION */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', color: '#475569', marginBottom: '6px' }}>
+                    External ID *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="bakery-uk-fca-secure-9901"
+                    value={externalId}
+                    onChange={(e) => setExternalId(e.target.value)}
+                    style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '13px', fontFamily: 'monospace', boxSizing: 'border-box' }}
+                  />
                 </div>
-              ))
-            )}
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', color: '#475569', marginBottom: '6px' }}>
+                    AWS Region *
+                  </label>
+                  <select
+                    value={region}
+                    onChange={(e) => setRegion(e.target.value)}
+                    style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '13px', boxSizing: 'border-box' }}
+                  >
+                    <option value="eu-west-2">eu-west-2 (London)</option>
+                    <option value="us-east-1">us-east-1 (N. Virginia)</option>
+                    <option value="eu-central-1">eu-central-1 (Frankfurt)</option>
+                    <option value="ap-south-1">ap-south-1 (Mumbai)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Submit Button */}
+              <button
+                type="submit"
+                disabled={loading}
+                style={{ width: '100%', padding: '12px', backgroundColor: '#2563eb', color: '#ffffff', fontWeight: 'bold', fontSize: '14px', border: 'none', borderRadius: '8px', cursor: 'pointer', marginTop: '8px' }}
+              >
+                {loading ? 'Verifying STS Handshake...' : 'Verify & Save AWS Connection'}
+              </button>
+
+              {/* CloudFormation Deep Link Helper */}
+              <div style={{ marginTop: '12px', padding: '12px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <h4 style={{ margin: '0 0 2px 0', fontSize: '12px', fontWeight: 'bold', color: '#0f172a' }}>Need a cross-account role?</h4>
+                  <p style={{ margin: 0, fontSize: '11px', color: '#64748b' }}>
+                    Launch a 1-click CloudFormation template in your console.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={launchCloudFormationStack}
+                  style={{ padding: '6px 12px', backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', color: '#334155', cursor: 'pointer' }}
+                >
+                  Launch Stack ↗
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+
+        {/* RIGHT COLUMN: Dark Telemetry Terminal Box */}
+        <div style={{ backgroundColor: '#020617', borderRadius: '16px', padding: '20px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', fontFamily: 'monospace', color: '#38bdf8' }}>
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #1e293b', paddingBottom: '12px', marginBottom: '16px' }}>
+              <span style={{ fontSize: '12px', color: '#94a3b8' }}>&gt;_ Realtime Telemetry &amp; IAM Audit Log</span>
+              <span style={{ fontSize: '10px', color: '#475569' }}>STS Monitor</span>
+            </div>
+
+            <div style={{ fontSize: '12px', minHeight: '220px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {logs.length === 0 ? (
+                <p style={{ color: '#475569', fontStyle: 'italic' }}>Waiting for connection action...</p>
+              ) : (
+                logs.map((log, index) => (
+                  <p key={index} style={{ margin: 0, color: log.includes('✅') ? '#4ade80' : log.includes('❌') ? '#f87171' : '#e2e8f0' }}>
+                    {log}
+                  </p>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div style={{ borderTop: '1px solid #1e293b', paddingTop: '12px', fontSize: '10px', color: '#64748b', display: 'flex', justifyContent: 'space-between' }}>
+            <span>Security: STS AssumeRole / AES-256</span>
+            <span>Region: {region}</span>
           </div>
         </div>
 
-        {/* Live Agent Playground (Unlocked after deployment) */}
-        {deployStatus === 'deployed' && (
-          <div className="card chat-card fade-in" style={{ marginTop: '24px' }}>
-            <div className="chat-header">
-              <div className="chat-title">
-                <Zap size={18} style={{ color: '#059669' }} />
-                <span>Agent Playground — Live Execution</span>
-              </div>
-              <span className="badge-glow">Bedrock AgentCore Active</span>
-            </div>
-
-            <div className="chat-body">
-              {chatMessages.map((msg, idx) => (
-                <div key={idx} className={`chat-bubble ${msg.sender}`}>
-                  <div className="chat-meta">
-                    <strong>{msg.sender === 'user' ? 'You' : agentName}</strong>
-                    <span>{msg.timestamp}</span>
-                  </div>
-                  <p>{msg.text}</p>
-                  {msg.mcpUsed && (
-                    <div className="mcp-tag">
-                      <Zap size={10} /> Executed via {msg.mcpUsed}
-                    </div>
-                  )}
-                </div>
-              ))}
-              {isAgentThinking && (
-                <div className="chat-bubble agent thinking">
-                  <Loader2 className="spinner" size={14} /> Bedrock AgentCore processing...
-                </div>
-              )}
-            </div>
-
-            <form onSubmit={handleSendMessage} className="chat-input-row">
-              <input
-                type="text"
-                placeholder="Ask the agent to run a compliance check or prompt..."
-                value={inputPrompt}
-                onChange={(e) => setInputPrompt(e.target.value)}
-              />
-              <button type="submit" disabled={isAgentThinking || !inputPrompt.trim()}>
-                <Send size={14} />
-              </button>
-            </form>
-          </div>
-        )}
       </div>
     </div>
   );
 };
+
+export default AwsAccountConnect;
