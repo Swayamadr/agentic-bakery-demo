@@ -27,26 +27,55 @@ export const AwsAccountConnect: React.FC<AwsAccountConnectProps> = ({
     setLogs((prev) => [...prev, `[${timestamp}] ${message}`]);
   };
 
-  // Option 1: Fully Automated Direct Provisioning
+  // ------------------------------------------------------------------
+  // Option 1: Fully Automated Direct Provisioning Call
+  // ------------------------------------------------------------------
   const handleAutomatedProvisioning = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setLogs([]);
     addLog('Initiating Automated Direct AWS Provisioning...');
-    addLog(`Region: ${region} | Tenant: ${tenantId}`);
+    addLog(`Target Region: ${region} | Tenant: ${tenantId}`);
 
-    setTimeout(() => {
-      addLog('Validating temporary AWS credentials...');
-      addLog('Creating Cross-Account IAM Trust Role...');
-      addLog(`Creating DynamoDB table: agentic-bakery-memory-${tenantId.toLowerCase()}...`);
-      addLog(`Creating S3 Knowledge Base Bucket in ${region}...`);
+    try {
+      addLog('Sending credentials to Express Control Plane API...');
+
+      const response = await fetch('http://localhost:3000/api/auto-setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accessKeyId,
+          secretAccessKey,
+          region,
+          externalId,
+          tenantId,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || data.error) {
+        throw new Error(data.message || 'Invalid AWS Access Key or Secret Key.');
+      }
+
+      addLog(`Connected AWS Account ID: ${data.accountId}`);
+      addLog(`Created IAM Role: ${data.roleArn}`);
+      addLog(`Created DynamoDB Table: ${data.tableName}`);
       addLog('✅ SUCCESS: All AWS infrastructure provisioned directly!');
+
+      if (onConnectionSuccess) {
+        onConnectionSuccess(data);
+      }
+    } catch (err: any) {
+      addLog(`❌ FAILED: ${err.message}`);
+    } finally {
       setLoading(false);
-      if (onConnectionSuccess) onConnectionSuccess({ status: 'SUCCESS' });
-    }, 1500);
+    }
   };
 
-  // Option 2: Existing IAM Role / Manual Verification
+  // ------------------------------------------------------------------
+  // Option 2: Real STS AssumeRole Verification Call
+  // ------------------------------------------------------------------
   const handleManualConnection = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -56,16 +85,41 @@ export const AwsAccountConnect: React.FC<AwsAccountConnectProps> = ({
     addLog(`External ID: ${externalId}`);
     addLog(`Region: ${region}`);
 
-    setTimeout(() => {
-      addLog('Verifying IAM Trust Policy & External ID handshake...');
+    try {
+      addLog('Calling Backend endpoint http://localhost:3000/api/connect-aws...');
+
+      const response = await fetch('http://localhost:3000/api/connect-aws', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roleArn,
+          externalId,
+          region,
+          tenantId,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || data.error) {
+        throw new Error(data.message || 'AccessDenied: Could not assume role. Check Role ARN and External ID.');
+      }
+
+      addLog(`Assumed Role Identity: ${data.assumedRoleArn}`);
       addLog('✅ STS AssumeRole Handshake Successful!');
       addLog('Connected to Customer AWS Data Plane.');
+
+      if (onConnectionSuccess) {
+        onConnectionSuccess(data);
+      }
+    } catch (err: any) {
+      addLog(`❌ FAILED: ${err.message}`);
+    } finally {
       setLoading(false);
-      if (onConnectionSuccess) onConnectionSuccess({ status: 'SUCCESS' });
-    }, 1200);
+    }
   };
 
-  // 1-Click CloudFormation Launch Helper
+  // 1-Click CloudFormation Helper
   const launchCloudFormationStack = () => {
     const templatePath = 'https://s3.amazonaws.com/agentic-bakery-templates/agentic-bakery-role.yaml';
     const cfnUrl = `https://console.aws.amazon.com/cloudformation/home#/stacks/quickcreate?stackName=AgenticBakeryIntegration&templateURL=${encodeURIComponent(
@@ -195,17 +249,16 @@ export const AwsAccountConnect: React.FC<AwsAccountConnectProps> = ({
               <button
                 type="submit"
                 disabled={loading}
-                style={{ width: '100%', padding: '12px', backgroundColor: '#2563eb', color: '#ffffff', fontWeight: 'bold', fontSize: '14px', border: 'none', borderRadius: '8px', cursor: 'pointer', marginTop: '8px' }}
+                style={{ width: '100%', padding: '12px', backgroundColor: '#2563eb', color: '#ffffff', fontWeight: 'bold', fontSize: '14px', border: 'none', borderRadius: '8px', cursor: loading ? 'not-allowed' : 'pointer', marginTop: '8px' }}
               >
                 {loading ? 'Provisioning Infrastructure...' : 'Provision Everything & Connect AWS'}
               </button>
             </form>
           )}
 
-          {/* Form Tab 2: Manual Role Connection (All 3 inputs editable) */}
+          {/* Form Tab 2: Manual Role Connection */}
           {activeTab === 'manual' && (
             <form onSubmit={handleManualConnection} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {/* 1. IAM ROLE ARN */}
               <div>
                 <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', color: '#475569', marginBottom: '6px' }}>
                   IAM Role ARN *
@@ -220,7 +273,6 @@ export const AwsAccountConnect: React.FC<AwsAccountConnectProps> = ({
                 />
               </div>
 
-              {/* 2. EXTERNAL ID & 3. AWS REGION */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', color: '#475569', marginBottom: '6px' }}>
@@ -253,16 +305,14 @@ export const AwsAccountConnect: React.FC<AwsAccountConnectProps> = ({
                 </div>
               </div>
 
-              {/* Submit Button */}
               <button
                 type="submit"
                 disabled={loading}
-                style={{ width: '100%', padding: '12px', backgroundColor: '#2563eb', color: '#ffffff', fontWeight: 'bold', fontSize: '14px', border: 'none', borderRadius: '8px', cursor: 'pointer', marginTop: '8px' }}
+                style={{ width: '100%', padding: '12px', backgroundColor: '#2563eb', color: '#ffffff', fontWeight: 'bold', fontSize: '14px', border: 'none', borderRadius: '8px', cursor: loading ? 'not-allowed' : 'pointer', marginTop: '8px' }}
               >
                 {loading ? 'Verifying STS Handshake...' : 'Verify & Save AWS Connection'}
               </button>
 
-              {/* CloudFormation Deep Link Helper */}
               <div style={{ marginTop: '12px', padding: '12px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
                   <h4 style={{ margin: '0 0 2px 0', fontSize: '12px', fontWeight: 'bold', color: '#0f172a' }}>Need a cross-account role?</h4>
