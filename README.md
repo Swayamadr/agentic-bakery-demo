@@ -2,7 +2,7 @@
 
 ##  Executive Summary
 
-**Agentic Bakery** provides a secure, multi-tenant framework for deploying and managing AI agents across isolated customer AWS accounts. Designed specifically for regulated environments (such as UK Financial Conduct Authority compliance standards), the platform strictly segregates administrative orchestration (**Control Plane**) from agent runtime execution and sensitive vector/model data (**Customer Data Plane**).
+**Agentic Bakery** provides a secure, multi-tenant framework for deploying and managing AI agents across isolated customer AWS accounts. Designed specifically for regulated environments, the platform strictly segregates administrative orchestration (**Control Plane**) from agent runtime execution and sensitive vector/model data (**Customer Data Plane**).
 
 ### Core Architectural Principles
 * **Data Sovereignty & Zero Data Leakage:** Customer data, vector embeddings, and Amazon Bedrock Knowledge Bases remain exclusively inside the customer's AWS boundary.
