@@ -6,7 +6,7 @@ interface AwsAccountConnectProps {
 }
 
 export const AwsAccountConnect: React.FC<AwsAccountConnectProps> = ({
-  tenantId = 'UK-FINANCE-01',
+  tenantId = 'TENANT-01',
   onConnectionSuccess,
 }) => {
   const [activeTab, setActiveTab] = useState<'automated' | 'manual'>('manual');
@@ -17,9 +17,9 @@ export const AwsAccountConnect: React.FC<AwsAccountConnectProps> = ({
   const [accessKeyId, setAccessKeyId] = useState<string>('');
   const [secretAccessKey, setSecretAccessKey] = useState<string>('');
 
-  // Form States - Manual Mode (All 3 Fields Fully Editable)
-  const [roleArn, setRoleArn] = useState<string>('arn:aws:iam::123456789012:role/AgenticBakeryRole');
-  const [externalId, setExternalId] = useState<string>('bakery-uk-fca-secure-9901');
+  // Form States - Manual Mode (Clean, Enterprise Default Values)
+  const [roleArn, setRoleArn] = useState<string>('arn:aws:iam::123456789012:role/AppIntegrationRole');
+  const [externalId, setExternalId] = useState<string>('app-secure-ext-9901');
   const [region, setRegion] = useState<string>('eu-west-2');
 
   const addLog = (message: string) => {
@@ -28,7 +28,7 @@ export const AwsAccountConnect: React.FC<AwsAccountConnectProps> = ({
   };
 
   // ------------------------------------------------------------------
-  // Option 1: Fully Automated Direct Provisioning Call
+  // Option 1: Automated Direct Provisioning Call
   // ------------------------------------------------------------------
   const handleAutomatedProvisioning = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,7 +38,7 @@ export const AwsAccountConnect: React.FC<AwsAccountConnectProps> = ({
     addLog(`Target Region: ${region} | Tenant: ${tenantId}`);
 
     try {
-      addLog('Sending credentials to Express Control Plane API...');
+      addLog('Sending credentials to Control Plane API...');
 
       const response = await fetch('http://localhost:3000/api/auto-setup', {
         method: 'POST',
@@ -58,9 +58,10 @@ export const AwsAccountConnect: React.FC<AwsAccountConnectProps> = ({
         throw new Error(data.message || 'Invalid AWS Access Key or Secret Key.');
       }
 
-      addLog(`Connected AWS Account ID: ${data.accountId}`);
-      addLog(`Created IAM Role: ${data.roleArn}`);
+      addLog(`Connected AWS Account ID: ${data.accountId || 'Verified'}`);
+      addLog(`Created IAM Role: ${data.roleName}`);
       addLog(`Created DynamoDB Table: ${data.tableName}`);
+      addLog(`Created S3 Bucket: ${data.bucketName}`);
       addLog('✅ SUCCESS: All AWS infrastructure provisioned directly!');
 
       if (onConnectionSuccess) {
@@ -121,8 +122,8 @@ export const AwsAccountConnect: React.FC<AwsAccountConnectProps> = ({
 
   // 1-Click CloudFormation Helper
   const launchCloudFormationStack = () => {
-    const templatePath = 'https://s3.amazonaws.com/agentic-bakery-templates/agentic-bakery-role.yaml';
-    const cfnUrl = `https://console.aws.amazon.com/cloudformation/home#/stacks/quickcreate?stackName=AgenticBakeryIntegration&templateURL=${encodeURIComponent(
+    const templatePath = 'https://s3.amazonaws.com/aws-integration-templates/app-cross-account-role.yaml';
+    const cfnUrl = `https://console.aws.amazon.com/cloudformation/home#/stacks/quickcreate?stackName=AppCrossAccountIntegration&templateURL=${encodeURIComponent(
       templatePath
     )}&param_ExternalId=${encodeURIComponent(externalId)}`;
     window.open(cfnUrl, '_blank');
@@ -134,11 +135,11 @@ export const AwsAccountConnect: React.FC<AwsAccountConnectProps> = ({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', borderBottom: '1px solid #e2e8f0', paddingBottom: '16px' }}>
         <div>
           <h2 style={{ fontSize: '24px', fontWeight: 'bold', color: '#0f172a', margin: '0 0 4px 0' }}>1. Connect AWS Account</h2>
-          <p style={{ fontSize: '14px', color: '#64748b', margin: 0 }}>Establish a secure, UK FCA-compliant link to run agents inside your AWS perimeter.</p>
+          <p style={{ fontSize: '14px', color: '#64748b', margin: 0 }}>Establish a secure cross-account link to manage resources inside your AWS perimeter.</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <span style={{ fontSize: '12px', fontWeight: '600', padding: '4px 12px', backgroundColor: '#eff6ff', color: '#1d4ed8', borderRadius: '9999px', border: '1px solid #bfdbfe' }}>
-            Data Plane Security
+            Data Plane Isolation
           </span>
           <span style={{ fontSize: '12px', fontFamily: 'monospace', color: '#64748b' }}>Tenant: {tenantId}</span>
         </div>
@@ -194,7 +195,7 @@ export const AwsAccountConnect: React.FC<AwsAccountConnectProps> = ({
           {activeTab === 'automated' && (
             <form onSubmit={handleAutomatedProvisioning} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ padding: '12px', backgroundColor: '#eff6ff', border: '1px solid #dbeafe', borderRadius: '8px', fontSize: '12px', color: '#1e40af' }}>
-                <strong>Zero AWS Console setup required.</strong> Enter credentials once to create IAM roles, DynamoDB tables, and S3 storage automatically.
+                <strong>Zero AWS Console setup required.</strong> Enter credentials once to provision IAM roles, DynamoDB tables, and S3 storage automatically.
               </div>
 
               <div>
@@ -266,7 +267,7 @@ export const AwsAccountConnect: React.FC<AwsAccountConnectProps> = ({
                 <input
                   type="text"
                   required
-                  placeholder="arn:aws:iam::123456789012:role/AgenticBakeryRole"
+                  placeholder="arn:aws:iam::123456789012:role/AppIntegrationRole"
                   value={roleArn}
                   onChange={(e) => setRoleArn(e.target.value)}
                   style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '13px', fontFamily: 'monospace', boxSizing: 'border-box' }}
@@ -281,7 +282,7 @@ export const AwsAccountConnect: React.FC<AwsAccountConnectProps> = ({
                   <input
                     type="text"
                     required
-                    placeholder="bakery-uk-fca-secure-9901"
+                    placeholder="app-secure-ext-9901"
                     value={externalId}
                     onChange={(e) => setExternalId(e.target.value)}
                     style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '13px', fontFamily: 'monospace', boxSizing: 'border-box' }}
